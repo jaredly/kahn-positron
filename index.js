@@ -8,8 +8,8 @@ var bounds = {
     right: 200,
     xscale: 10,
     yscale: 10,
-    xlim: [0, 15],
-    ylim: [0, 15],
+    xlim: [-10, 15],
+    ylim: [-10, 15],
 };
 
 bounds.xscale = (bounds.right - bounds.left) / (bounds.xlim[1] - bounds.xlim[0]);
@@ -22,7 +22,7 @@ var cx = function (x, bounds) {
 };
 
 var cy = function (y, bounds) {
-    return bounds.bottom - y * bounds.yscale - bounds.ylim[0] * bounds.yscale;
+    return bounds.bottom - y * bounds.yscale + bounds.ylim[0] * bounds.yscale;
 };
 
 var COLORS = {
@@ -103,12 +103,12 @@ var xIntercept = function (wx, wy, bias, y) {
 
 var verticalWeight = function (wx, bias, bounds) {
     var x = -bias / wx;
-    if (x <= 0) {
+    if (x <= bounds.xlim[0]) {
         setFill(wx > 0 ? 'lightred' : 'lightgreen');
         fillBounds(bounds);
         return;
     }
-    if (x >= bounds.xlim) {
+    if (x >= bounds.xlim[1]) {
         setFill(wx > 0 ? 'lightgreen' : 'lightred');
         fillBounds(bounds);
         return;
@@ -131,12 +131,12 @@ var verticalWeight = function (wx, bias, bounds) {
 
 var horizontalWeight = function (wy, bias, bounds) {
     var y = -bias / wy;
-    if (y <= 0) {
+    if (y <= bounds.ylim[0]) {
         setFill('lightred');
         fillBounds(bounds);
         return;
     }
-    if (y >= bounds.ylim) {
+    if (y >= bounds.ylim[1]) {
         setFill('lightgreen');
         fillBounds(bounds);
         return;
@@ -157,36 +157,54 @@ var horizontalWeight = function (wy, bias, bounds) {
     });
 };
 
+var topBottomLine = function (wx, wy, bias, bounds, fromTop) {
+    var atLeft = yIntercept(wx, wy, bias, bounds.ylim[0]);
+    var atRight = yIntercept(wx, wy, bias, bounds.ylim[1]);
+    return [bounds.xlim[0], atLeft, bounds.xlim[1], atRight];
+};
+
+var leftRightLine = function (wx, wy, bias, bounds, fromLeft) {
+    var atTop = xIntercept(wx, wy, bias, bounds.xlim[1]);
+    var atBottom = xIntercept(wx, wy, bias, bounds.xlim[0]);
+    return [atTop, bounds.ylim[1], atBottom, bounds.ylim[0]];
+};
+
 var topBottomWeights = function (wx, wy, bias, bounds, fromTop) {
-    var left = yIntercept(wx, wy, bias, 0);
-    var right = yIntercept(wx, wy, bias, bounds.ylim);
+    var left = yIntercept(wx, wy, bias, bounds.ylim[0]);
+    var right = yIntercept(wx, wy, bias, bounds.ylim[1]);
     setFill(fromTop ? 'lightred' : 'lightgreen');
-    quad(cx(0, bounds), cy(bounds.ylim, bounds),
-            cx(0, bounds), cy(left, bounds),
-            cx(bounds.xlim, bounds), cy(right, bounds),
-            cx(bounds.xlim, bounds), cy(bounds.ylim, bounds));
+    quad(cx(bounds.xlim[0], bounds), cy(bounds.ylim[1], bounds),
+         cx(bounds.xlim[0], bounds), cy(left,           bounds),
+         cx(bounds.xlim[1], bounds), cy(right,          bounds),
+         cx(bounds.xlim[1], bounds), cy(bounds.ylim[1], bounds));
     setFill(fromTop ? 'lightgreen' : 'lightred');
-    quad(cx(0, bounds), cy(0, bounds),
-            cx(0, bounds), cy(left, bounds),
-            cx(bounds.xlim, bounds), cy(right, bounds),
-            cx(bounds.xlim, bounds), cy(0, bounds));
+    quad(cx(bounds.xlim[0], bounds), cy(bounds.ylim[0], bounds),
+         cx(bounds.xlim[0], bounds), cy(left,           bounds),
+         cx(bounds.xlim[1], bounds), cy(right,          bounds),
+         cx(bounds.xlim[1], bounds), cy(bounds.ylim[0], bounds));
 };
 
 var leftRightWeights = function (wx, wy, bias, bounds, fromLeft) {
-    var top = xIntercept(wx, wy, bias, bounds.xlim);
-    var bottom = xIntercept(wx, wy, bias, 0);
+    var top = xIntercept(wx, wy, bias, bounds.xlim[1]);
+    var bottom = xIntercept(wx, wy, bias, bounds.xlim[0]);
     setFill(fromLeft ? 'lightred' : 'lightgreen');
-    quad(cx(0, bounds), cy(bounds.ylim, bounds),
-        cx(0, bounds), cy(0, bounds),
-        cx(bottom, bounds),    cy(0, bounds),
-        cy(top, bounds), cy(bounds.ylim, bounds)
+    quad(cx(bounds.xlim[0], bounds), cy(bounds.ylim[1], bounds),
+         cx(bounds.xlim[0], bounds), cy(bounds.ylim[0], bounds),
+         cx(bottom, bounds),         cy(bounds.ylim[0], bounds),
+         cx(top, bounds),            cy(bounds.ylim[1], bounds)
     );
     setFill(fromLeft ? 'lightgreen' : 'lightred');
-    quad(cx(bounds.xlim, bounds),     cy(bounds.ylim, bounds),
-            cx(bounds.xlim, bounds),     cy(0, bounds),
-            cx(bottom, bounds), cy(0, bounds),
-            cy(top, bounds),    cy(bounds.ylim, bounds)
+    quad(cx(bounds.xlim[1], bounds),     cy(bounds.ylim[1], bounds),
+         cx(bounds.xlim[1], bounds),     cy(bounds.ylim[0], bounds),
+         cx(bottom, bounds),             cy(bounds.ylim[0], bounds),
+         cx(top, bounds),                cy(bounds.ylim[1], bounds)
     );
+};
+
+var cornerLine = function (wx, wy, bias, bounds, x, y, fromCorner) {
+    var xi = xIntercept(wx, wy, bias, y);
+    var yi = yIntercept(wx, wy, bias, x);
+    return [x, yi, xi, y];
 };
 
 var drawCorner = function (wx, wy, bias, bounds, x, y, fromCorner) {
@@ -202,56 +220,82 @@ var drawCorner = function (wx, wy, bias, bounds, x, y, fromCorner) {
 
     setFill(fromCorner ? 'lightgreen' : 'lightred');
     quad(
-            cx(x, bounds),      cy(bounds.ylim - y, bounds),
+            cx(x, bounds),      cy(bounds.ylim[1] - y, bounds),
             cx(x, bounds),      cy(yi, bounds),
             cx(xi, bounds),     cy(y, bounds),
-            cx(bounds.xlim - x, bounds), cy(y, bounds)
+            cx(bounds.xlim[1] - x, bounds), cy(y, bounds)
         );
     triangle(
-            cx(bounds.xlim - x, bounds), cy(y, bounds),
-            cx(bounds.xlim - x, bounds), cy(bounds.ylim - y, bounds),
-            cx(x, bounds),      cy(bounds.ylim - y, bounds)
+            cx(bounds.xlim[1] - x, bounds), cy(y, bounds),
+            cx(bounds.xlim[1] - x, bounds), cy(bounds.ylim[1] - y, bounds),
+            cx(x, bounds),      cy(bounds.ylim[1] - y, bounds)
         );
         
 };
 
-
-
 var whichCorner = function (tl, tr, bl, br) {
     if (tl === tr && tl === bl) {
         return {
-            x: 0,
+            x: bounds.xlim[0],
             y: bounds.ylim,
             fromCorner: br
         };
     }
     if (tl === tr && tl === br) {
         return {
-            x: 0,
-            y: 0,
+            x: bounds.xlim[0],
+            y: bounds.ylim[0],
             fromCorner: bl
         };
     }
     if (tl === br && br === bl) {
         return {
-            x: bounds.xlim,
-            y: bounds.ylim,
+            x: bounds.xlim[1],
+            y: bounds.ylim[1],
             fromCorner: tr
         };
     }
     return {
-        x: 0,
-        y: bounds.ylim,
+        x: bounds.xlim[0],
+        y: bounds.ylim[1],
         fromCorner: tl
     };
 };
 
+var findLine = function (wx, wy, bias, bounds) {
+    var weights = [wx, wy, bias];
+    var tl = calcNet([bounds.xlim[0], bounds.ylim[1], 1], weights) > 0;
+    var tr = calcNet([bounds.xlim[1], bounds.ylim[1], 1], weights) > 0;
+    var bl = calcNet([bounds.xlim[0], bounds.ylim[0], 1], weights) > 0;
+    var br = calcNet([bounds.xlim[1], bounds.ylim[0], 1], weights) > 0;
+    if (tl && tr && !bl && !br) {
+        return topBottomLine(wx, wy, bias, bounds, true);
+    }
+    if (!tl && !tr && bl && br) {
+        return topBottomLine(wx, wy, bias, bounds, false);
+    }
+    if (tl && bl && !tr && !br) {
+        return leftRightLine(wx, wy, bias, bounds, true);
+    }
+    if (!tl && !bl && tr && br) {
+        return leftRightLine(wx, wy, bias, bounds, false);
+    }
+
+    // it must be a corner
+    var corner = whichCorner(tl, tr, bl, br);
+    var cz = [tl, tr, bl, br];
+    if (tl === tr && tl === bl && bl === br) {
+        return false;
+    }
+    return cornerLine(wx, wy, bias, bounds, corner.x, corner.y, corner.fromCorner);
+};
+
 var showWeights = function (wx, wy, bias, bounds) {
     var weights = [wx, wy, bias];
-    var tl = calcNet([0, bounds.ylim, 1], weights) > 0;
-    var tr = calcNet([bounds.xlim, bounds.ylim, 1], weights) > 0;
-    var bl = calcNet([0, 0, 1], weights) > 0;
-    var br = calcNet([bounds.xlim, 0, 1], weights) > 0;
+    var tl = calcNet([bounds.xlim[0], bounds.ylim[1], 1], weights) > 0;
+    var tr = calcNet([bounds.xlim[1], bounds.ylim[1], 1], weights) > 0;
+    var bl = calcNet([bounds.xlim[0], bounds.ylim[0], 1], weights) > 0;
+    var br = calcNet([bounds.xlim[1], bounds.ylim[0], 1], weights) > 0;
     // four possibilities: top, bottom, left, right, tl, tr, bl, br
     if (tl && tr && !bl && !br) {
         return topBottomWeights(wx, wy, bias, bounds, true);
@@ -369,6 +413,12 @@ var messages = ['First run'];
 var results = [];
 var listOfWeights = [];
 
+
+var drawWeightLine = function (weights, bounds) {
+    var l = findLine(weights[0], weights[1], weights[2], bounds);
+    line(cx(l[0], bounds), cy(l[1], bounds), cx(l[2], bounds), cy(l[3], bounds));
+};
+
 var draw = function () {
     if (lastWrong === 0) {
         return;
@@ -379,6 +429,8 @@ var draw = function () {
     var diff = train(data[onPoint], weights, training_rate);
     results.push(diff === 0);
     drawGraph(data, old, onPoint, results);
+    strokeWeight(1);
+    drawWeightLine(weights, bounds);
 
     wrong += diff;
     onPoint += 1;
@@ -414,6 +466,13 @@ var showme = function (wx, wy, bias) {
         ellipse(cx(i, bounds), cy(yIntercept(wx, wy, bias, i), bounds), point_size, point_size);
     }
 };
-//showme(-2, 3, -1);
+
+/*
+showme(-2, 3, -1);
+stroke(0, 0, 0);
+var l = findLine(-2, 3, -1, bounds);
+line(cx(l[0], bounds), cy(l[1], bounds), cx(l[2], bounds), cy(l[3], bounds));
+*/
 //setFill(calcNet([10, 6, 1], [-2, 3, -1]) > 0 ? 'red' : 'green');
 //plotme(10, 6);
+
